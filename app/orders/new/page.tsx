@@ -10,13 +10,6 @@ import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import type { Product } from "@/lib/types"
 import { formatCurrency } from "@/lib/types"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { useEffect } from "react"
 
 interface CartItem {
@@ -30,8 +23,8 @@ export default function NewOrderPage() {
   const [search, setSearch] = useState("")
   const [cart, setCart] = useState<CartItem[]>([])
   const [customerName, setCustomerName] = useState("")
-  const [paymentStatus, setPaymentStatus] = useState<"مدفوع" | "دين" | "دفع جزئي">("مدفوع")
-  const [paidAmount, setPaidAmount] = useState("")
+  const [orderDiscount, setOrderDiscount] = useState("")
+  const [debtAmount, setDebtAmount] = useState("")
   const [editingPrice, setEditingPrice] = useState<string | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const router = useRouter()
@@ -99,20 +92,33 @@ export default function NewOrderPage() {
     toast.success("تم تحديث السعر")
   }
 
-  const totals = cart.reduce(
+  // حساب إجماليات السلة
+  const cartTotals = cart.reduce(
     (acc, item) => {
       const actualPrice = item.customPrice ?? item.product.selling_price
       const discountAmount = item.customPrice ? (item.product.selling_price - item.customPrice) * item.quantity : 0
 
       return {
         amount: acc.amount + actualPrice * item.quantity,
-        cost: acc.cost + item.product.cost_price * item.quantity,
-        profit: acc.profit + (actualPrice - item.product.cost_price) * item.quantity,
+        cost: acc.cost + item.product.purchase_price * item.quantity,
+        profit: acc.profit + (actualPrice - item.product.purchase_price) * item.quantity,
         totalDiscount: acc.totalDiscount + discountAmount,
       }
     },
     { amount: 0, cost: 0, profit: 0, totalDiscount: 0 },
   )
+
+  // حساب الخصم والدين
+  const orderDiscountAmount = Number.parseFloat(orderDiscount) || 0
+  const actualDebt = Number.parseFloat(debtAmount) || 0
+  
+  // المبلغ النهائي = إجمالي السلة - خصم الطلب
+  const totals = {
+    ...cartTotals,
+    amount: cartTotals.amount - orderDiscountAmount,
+    profit: cartTotals.profit - orderDiscountAmount,
+    totalDiscount: cartTotals.totalDiscount + orderDiscountAmount,
+  }
 
   const handleSubmit = async () => {
     if (cart.length === 0) {
@@ -120,46 +126,54 @@ export default function NewOrderPage() {
       return
     }
 
-    if ((paymentStatus === "دين" || paymentStatus === "دفع جزئي") && !customerName.trim()) {
-      toast.error("الرجاء إدخال اسم العميل للطلبات غير المدفوعة بالكامل")
+    // التحقق من صحة الخصم
+    if (orderDiscountAmount < 0) {
+      toast.error("مبلغ الخصم لا يمكن أن يكون سالباً")
       return
     }
 
-    if (paymentStatus === "دفع جزئي") {
-      const paid = Number.parseFloat(paidAmount)
-      if (Number.isNaN(paid) || paid <= 0) {
-        toast.error("الرجاء إدخال المبلغ المدفوع")
-        return
-      }
-      if (paid >= totals.amount) {
-        toast.error("المبلغ المدفوع يجب أن يكون أقل من الإجمالي")
-        return
+    if (orderDiscountAmount > cartTotals.amount) {
+      toast.error("مبلغ الخصم لا يمكن أن يكون أكبر من إجمالي السلة")
+      return
+    }
+
+    // التحقق من مبلغ الدين
+    if (actualDebt > 0 && !customerName.trim()) {
+      toast.error("الرجاء إدخال اسم العميل عند وجود دين")
+      return
+    }
+
+    if (actualDebt > totals.amount) {
+      toast.error("مبلغ الدين لا يمكن أن يكون أكبر من المبلغ الإجمالي بعد الخصم")
+      return
+    }
+
+    // حساب المبلغ المدفوع بناءً على الدين
+    const actualPaidAmount = totals.amount - actualDebt
+
+    // تحديد حالة الدفع تلقائياً
+    let finalPaymentStatus: "مدفوع" | "دين" | "دفع جزئي" = "مدفوع"
+    if (actualDebt > 0) {
+      if (actualPaidAmount <= 0) {
+        finalPaymentStatus = "دين"
+      } else {
+        finalPaymentStatus = "دفع جزئي"
       }
     }
 
     setLoading(true)
     const supabase = createClient()
 
-    let finalPaidAmount = 0
-    let finalRemainingAmount = totals.amount
-
-    if (paymentStatus === "مدفوع") {
-      finalPaidAmount = totals.amount
-      finalRemainingAmount = 0
-    } else if (paymentStatus === "دفع جزئي") {
-      finalPaidAmount = Number.parseFloat(paidAmount)
-      finalRemainingAmount = totals.amount - finalPaidAmount
-    }
-
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .insert({
         total_amount: totals.amount,
+        total_cost: totals.cost,
+        total_profit: totals.profit,
         status: "مكتمل",
         customer_name: customerName.trim() || null,
-        payment_status: paymentStatus,
-        paid_amount: finalPaidAmount,
-        remaining_amount: finalRemainingAmount,
+        payment_status: finalPaymentStatus,
+        paid_amount: actualPaidAmount,
       })
       .select()
       .single()
@@ -170,6 +184,7 @@ export default function NewOrderPage() {
       return
     }
 
+    // إضافة عناصر الطلب
     for (const item of cart) {
       const actualPrice = item.customPrice ?? item.product.selling_price
       const discountAmount = item.customPrice ? item.product.selling_price - item.customPrice : 0
@@ -177,21 +192,26 @@ export default function NewOrderPage() {
       await supabase.from("order_items").insert({
         order_id: order.id,
         product_id: item.product.id,
+        product_name: item.product.name,
         quantity: item.quantity,
-        price: actualPrice,
+        unit_price: item.product.selling_price,
+        unit_cost: item.product.purchase_price,
+        total_price: actualPrice * item.quantity,
+        total_cost: item.product.purchase_price * item.quantity,
+        profit: (actualPrice - item.product.purchase_price) * item.quantity,
         custom_price: item.customPrice || null,
-        discount_amount: discountAmount,
+        discount_amount: discountAmount * item.quantity,
       })
 
       const newQuantity = item.product.quantity - item.quantity
       await supabase.from("products").update({ quantity: newQuantity }).eq("id", item.product.id)
     }
 
-    if (paymentStatus !== "مدفوع" && finalPaidAmount > 0) {
+    // إضافة سجل الدفع الأولي إذا كان هناك دفع
+    if (actualPaidAmount > 0) {
       await supabase.from("payment_history").insert({
         order_id: order.id,
-        amount: finalPaidAmount,
-        payment_method: "نقدي",
+        payment_amount: actualPaidAmount,
         notes: "دفعة أولية عند إنشاء الطلب",
       })
     }
@@ -235,48 +255,60 @@ export default function NewOrderPage() {
               <div>
                 <Label htmlFor="customerName" className="text-sm text-text-muted mb-2 flex items-center gap-2">
                   <User size={16} />
-                  اسم العميل {(paymentStatus === "دين" || paymentStatus === "دفع جزئي") && <span className="text-danger">*</span>}
+                  اسم العميل {actualDebt > 0 && <span className="text-danger">*</span>}
                 </Label>
                 <Input
                   id="customerName"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="اسم العميل (اختياري)"
+                  placeholder="اسم العميل (مطلوب عند وجود دين)"
                   className="rounded-lg h-12"
                 />
               </div>
 
-              <div>
-                <Label htmlFor="paymentStatus" className="text-sm text-text-muted mb-2 flex items-center gap-2">
-                  <CreditCard size={16} />
-                  حالة الدفع
-                </Label>
-                <Select value={paymentStatus} onValueChange={(v: any) => setPaymentStatus(v)}>
-                  <SelectTrigger className="rounded-lg h-12">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="مدفوع">مدفوع كاملاً</SelectItem>
-                    <SelectItem value="دفع جزئي">دفع جزئي</SelectItem>
-                    <SelectItem value="دين">دين (لم يدفع)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {paymentStatus === "دفع جزئي" && (
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="paidAmount" className="text-sm text-text-muted mb-2">
-                    المبلغ المدفوع
+                  <Label htmlFor="orderDiscount" className="text-sm text-text-muted mb-2 flex items-center gap-2">
+                    <CreditCard size={16} />
+                    خصم على الطلب
                   </Label>
                   <Input
-                    id="paidAmount"
+                    id="orderDiscount"
                     type="number"
                     step="0.01"
-                    value={paidAmount}
-                    onChange={(e) => setPaidAmount(e.target.value)}
+                    min="0"
+                    value={orderDiscount}
+                    onChange={(e) => setOrderDiscount(e.target.value)}
                     placeholder="0.00"
                     className="rounded-lg h-12"
                   />
+                </div>
+                <div>
+                  <Label htmlFor="debtAmount" className="text-sm text-text-muted mb-2 flex items-center gap-2">
+                    <CreditCard size={16} />
+                    مبلغ الدين
+                  </Label>
+                  <Input
+                    id="debtAmount"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={debtAmount}
+                    onChange={(e) => setDebtAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="rounded-lg h-12"
+                  />
+                </div>
+              </div>
+
+              {(orderDiscountAmount > 0 || actualDebt > 0) && (
+                <div className="text-sm space-y-1 p-3 bg-muted rounded-lg">
+                  {orderDiscountAmount > 0 && (
+                    <p className="text-success">الخصم: {formatCurrency(orderDiscountAmount)}</p>
+                  )}
+                  {actualDebt > 0 && (
+                    <p className="text-warning">الدين: {formatCurrency(actualDebt)} | سيدفع العميل: {formatCurrency(totals.amount - actualDebt)}</p>
+                  )}
                 </div>
               )}
             </div>

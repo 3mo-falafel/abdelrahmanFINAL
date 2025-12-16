@@ -11,13 +11,6 @@ import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import type { Product } from "@/lib/types"
 import { formatCurrency } from "@/lib/types"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 
 interface CreateOrderDialogProps {
   products: Product[]
@@ -35,8 +28,8 @@ export function CreateOrderDialog({ products }: CreateOrderDialogProps) {
   const [search, setSearch] = useState("")
   const [cart, setCart] = useState<CartItem[]>([])
   const [customerName, setCustomerName] = useState("")
-  const [paymentStatus, setPaymentStatus] = useState<"مدفوع" | "دين" | "دفع جزئي">("مدفوع")
-  const [paidAmount, setPaidAmount] = useState("")
+  const [orderDiscount, setOrderDiscount] = useState("")
+  const [debtAmount, setDebtAmount] = useState("")
   const [editingPrice, setEditingPrice] = useState<string | null>(null)
   const router = useRouter()
 
@@ -87,7 +80,7 @@ export function CreateOrderDialog({ products }: CreateOrderDialogProps) {
   }
 
   // حساب الإجماليات مع الأسعار المخصصة
-  const totals = cart.reduce(
+  const cartTotals = cart.reduce(
     (acc, item) => {
       const actualPrice = item.customPrice ?? item.product.selling_price
       const itemTotal = actualPrice * item.quantity
@@ -105,28 +98,58 @@ export function CreateOrderDialog({ products }: CreateOrderDialogProps) {
     { amount: 0, cost: 0, profit: 0, totalDiscount: 0 },
   )
 
+  // حساب الخصم الإضافي على مستوى الطلب
+  const orderDiscountAmount = Number.parseFloat(orderDiscount) || 0
+  const actualDebt = Number.parseFloat(debtAmount) || 0
+  
+  // المبلغ النهائي = إجمالي السلة - خصم الطلب
+  const totals = {
+    ...cartTotals,
+    amount: cartTotals.amount - orderDiscountAmount,
+    profit: cartTotals.profit - orderDiscountAmount,
+    totalDiscount: cartTotals.totalDiscount + orderDiscountAmount,
+  }
+
   const handleSubmit = async () => {
     if (cart.length === 0) {
       toast.error("الرجاء إضافة منتجات للطلب")
       return
     }
 
-    // التحقق من اسم العميل في حالة الدين
-    if ((paymentStatus === "دين" || paymentStatus === "دفع جزئي") && !customerName.trim()) {
-      toast.error("الرجاء إدخال اسم العميل للطلبات المدينة")
+    // التحقق من صحة الخصم
+    if (orderDiscountAmount < 0) {
+      toast.error("مبلغ الخصم لا يمكن أن يكون سالباً")
       return
     }
 
-    // التحقق من المبلغ المدفوع في حالة الدفع الجزئي
-    let actualPaidAmount = totals.amount
-    if (paymentStatus === "دفع جزئي") {
-      actualPaidAmount = Number.parseFloat(paidAmount)
-      if (isNaN(actualPaidAmount) || actualPaidAmount <= 0 || actualPaidAmount >= totals.amount) {
-        toast.error("الرجاء إدخال مبلغ صحيح للدفع الجزئي")
-        return
+    if (orderDiscountAmount > cartTotals.amount) {
+      toast.error("مبلغ الخصم لا يمكن أن يكون أكبر من إجمالي السلة")
+      return
+    }
+
+    // التحقق من مبلغ الدين - إذا كان هناك دين يجب إدخال اسم العميل
+    if (actualDebt > 0 && !customerName.trim()) {
+      toast.error("الرجاء إدخال اسم العميل عند وجود دين")
+      return
+    }
+
+    if (actualDebt > totals.amount) {
+      toast.error("مبلغ الدين لا يمكن أن يكون أكبر من المبلغ الإجمالي بعد الخصم")
+      return
+    }
+
+    // حساب المبلغ المدفوع بناءً على الدين
+    // المبلغ المدفوع = الإجمالي (بعد الخصم) - الدين
+    const actualPaidAmount = totals.amount - actualDebt
+
+    // تحديد حالة الدفع تلقائياً
+    let finalPaymentStatus: "مدفوع" | "دين" | "دفع جزئي" = "مدفوع"
+    if (actualDebt > 0) {
+      if (actualPaidAmount <= 0) {
+        finalPaymentStatus = "دين"
+      } else {
+        finalPaymentStatus = "دفع جزئي"
       }
-    } else if (paymentStatus === "دين") {
-      actualPaidAmount = 0
     }
 
     setLoading(true)
@@ -141,7 +164,7 @@ export function CreateOrderDialog({ products }: CreateOrderDialogProps) {
         total_profit: totals.profit,
         status: "جديد",
         customer_name: customerName.trim() || null,
-        payment_status: paymentStatus,
+        payment_status: finalPaymentStatus,
         paid_amount: actualPaidAmount,
       })
       .select()
@@ -205,8 +228,8 @@ export function CreateOrderDialog({ products }: CreateOrderDialogProps) {
     setCart([])
     setSearch("")
     setCustomerName("")
-    setPaymentStatus("مدفوع")
-    setPaidAmount("")
+    setOrderDiscount("")
+    setDebtAmount("")
     router.refresh()
     setLoading(false)
   }
@@ -237,48 +260,59 @@ export function CreateOrderDialog({ products }: CreateOrderDialogProps) {
               <div>
                 <Label htmlFor="customerName" className="text-xs text-text-muted mb-1 flex items-center gap-1">
                   <User size={12} />
-                  اسم العميل {(paymentStatus === "دين" || paymentStatus === "دفع جزئي") && <span className="text-danger">*</span>}
+                  اسم العميل {Number.parseFloat(debtAmount) > 0 && <span className="text-danger">*</span>}
                 </Label>
                 <Input
                   id="customerName"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="اسم العميل (اختياري)"
+                  placeholder="اسم العميل (مطلوب عند وجود دين)"
                   className="rounded-lg"
                 />
               </div>
 
-              <div>
-                <Label htmlFor="paymentStatus" className="text-xs text-text-muted mb-1 flex items-center gap-1">
-                  <CreditCard size={12} />
-                  حالة الدفع
-                </Label>
-                <Select value={paymentStatus} onValueChange={(v: any) => setPaymentStatus(v)}>
-                  <SelectTrigger className="rounded-lg">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="مدفوع">مدفوع كاملاً</SelectItem>
-                    <SelectItem value="دفع جزئي">دفع جزئي</SelectItem>
-                    <SelectItem value="دين">دين (لم يدفع)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {paymentStatus === "دفع جزئي" && (
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label htmlFor="paidAmount" className="text-xs text-text-muted mb-1">
-                    المبلغ المدفوع
+                  <Label htmlFor="orderDiscount" className="text-xs text-text-muted mb-1 flex items-center gap-1">
+                    <CreditCard size={12} />
+                    خصم على الطلب
                   </Label>
                   <Input
-                    id="paidAmount"
+                    id="orderDiscount"
                     type="number"
                     step="0.01"
-                    value={paidAmount}
-                    onChange={(e) => setPaidAmount(e.target.value)}
+                    min="0"
+                    value={orderDiscount}
+                    onChange={(e) => setOrderDiscount(e.target.value)}
                     placeholder="0.00"
                     className="rounded-lg"
                   />
+                </div>
+                <div>
+                  <Label htmlFor="debtAmount" className="text-xs text-text-muted mb-1 flex items-center gap-1">
+                    <CreditCard size={12} />
+                    مبلغ الدين
+                  </Label>
+                  <Input
+                    id="debtAmount"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={debtAmount}
+                    onChange={(e) => setDebtAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="rounded-lg"
+                  />
+                </div>
+              </div>
+              {(orderDiscountAmount > 0 || actualDebt > 0) && (
+                <div className="text-xs space-y-1 p-2 bg-muted rounded-lg">
+                  {orderDiscountAmount > 0 && (
+                    <p className="text-success">الخصم: {formatCurrency(orderDiscountAmount)}</p>
+                  )}
+                  {actualDebt > 0 && (
+                    <p className="text-warning">الدين: {formatCurrency(actualDebt)} | سيدفع: {formatCurrency(totals.amount - actualDebt)}</p>
+                  )}
                 </div>
               )}
             </div>
