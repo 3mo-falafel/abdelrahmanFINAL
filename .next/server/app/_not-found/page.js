@@ -1,0 +1,13 @@
+var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/_not-found/page.js")
+R.c("server/chunks/ssr/Downloads_arabic-store-management (1)_c2caf7d8._.js")
+R.c("server/chunks/ssr/[root-of-the-server]__65f19e9a._.js")
+R.c("server/chunks/ssr/f379c_next_dist_esm_build_templates_app-page_8381171c.js")
+R.c("server/chunks/ssr/[root-of-the-server]__b5e92753._.js")
+R.c("server/chunks/ssr/[root-of-the-server]__850d93f4._.js")
+R.c("server/chunks/ssr/[root-of-the-server]__e77aa300._.js")
+R.c("server/chunks/ssr/[root-of-the-server]__3a0cef31._.js")
+R.c("server/chunks/ssr/f379c_next_dist_client_components_3ee99b80._.js")
+R.c("server/chunks/ssr/f379c_next_dist_client_components_builtin_forbidden_8a7544b2.js")
+R.c("server/chunks/ssr/cbb00_-store-management (1)__next-internal_server_app__not-found_page_actions_769c02a6.js")
+R.m(37918)
+module.exports=R.m(37918).exports
