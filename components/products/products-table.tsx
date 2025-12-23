@@ -43,6 +43,10 @@ export function ProductsTable({ products, onProductsChange }: ProductsTableProps
     )
   })
 
+  // Numbering and classification
+  const totalProducts = filteredProducts.length
+  const classificationCount = Array.from(new Set(filteredProducts.map(p => p.name))).length
+
   const handleQuantityChange = async (product: Product, change: number) => {
     const newQuantity = product.quantity + change
     if (newQuantity < 0) return
@@ -113,6 +117,14 @@ export function ProductsTable({ products, onProductsChange }: ProductsTableProps
           )}
         </div>
         {search && <p className="mt-2 text-sm text-text-muted">تم العثور على {filteredProducts.length} منتج</p>}
+        <div className="flex flex-wrap gap-4 mt-4">
+          <span className="text-base text-text-muted bg-muted px-4 py-2 rounded-xl">
+            عدد المنتجات: <span className="font-bold">{totalProducts}</span>
+          </span>
+          <span className="text-base text-text-muted bg-muted px-4 py-2 rounded-xl">
+            عدد التصنيفات: <span className="font-bold">{classificationCount}</span>
+          </span>
+        </div>
       </div>
 
       {/* الجدول */}
@@ -126,6 +138,7 @@ export function ProductsTable({ products, onProductsChange }: ProductsTableProps
           <table className="w-full">
             <thead className="bg-muted">
               <tr>
+                <th className="text-center p-4 font-semibold text-text">#</th>
                 <th className="text-right p-4 font-semibold text-text">المنتج</th>
                 <th className="text-right p-4 font-semibold text-text">الكود</th>
                 <th className="text-right p-4 font-semibold text-text">سعر الشراء</th>
@@ -137,13 +150,14 @@ export function ProductsTable({ products, onProductsChange }: ProductsTableProps
               </tr>
             </thead>
             <tbody>
-              {filteredProducts.map((product) => {
+              {filteredProducts.map((product, idx) => {
                 const profit = product.selling_price - product.purchase_price
                 const status = getStockStatus(product.quantity, product.low_stock_threshold)
                 const isLoading = loadingId === product.id
 
                 return (
                   <tr key={product.id} className="border-t border-border hover:bg-muted/50 transition-colors">
+                    <td className="p-4 text-center font-bold">{idx + 1}</td>
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         {product.image_url ? (

@@ -28,7 +28,7 @@ export function AddProductDialog({ onProductAdded }: AddProductDialogProps) {
     purchase_price: "",
     selling_price: "",
     quantity: "",
-    low_stock_threshold: "5",
+    low_stock_threshold: "1",
     image_url: "",
   })
 
