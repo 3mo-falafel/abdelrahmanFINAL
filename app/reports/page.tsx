@@ -3,6 +3,10 @@ import { Sidebar } from "@/components/sidebar"
 import { ReportsContent } from "@/components/reports/reports-content"
 import type { Product, Order, OrderItem } from "@/lib/types"
 
+// Disable caching for this page to always fetch fresh data
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 export default async function ReportsPage() {
   const supabase = await createClient()
 

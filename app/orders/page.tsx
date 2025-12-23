@@ -6,6 +6,10 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 
+// Disable caching for this page to always fetch fresh data
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 export default async function OrdersPage() {
   const supabase = await createClient()
 

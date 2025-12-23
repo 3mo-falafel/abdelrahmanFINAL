@@ -23,9 +23,10 @@ import { useRouter } from "next/navigation"
 
 interface ProductsTableProps {
   products: Product[]
+  onProductsChange?: () => void
 }
 
-export function ProductsTable({ products }: ProductsTableProps) {
+export function ProductsTable({ products, onProductsChange }: ProductsTableProps) {
   const [search, setSearch] = useState("")
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null)
   const [editProduct, setEditProduct] = useState<Product | null>(null)
@@ -58,7 +59,11 @@ export function ProductsTable({ products }: ProductsTableProps) {
       toast.error("حدث خطأ في تحديث الكمية")
     } else {
       toast.success("تم تحديث الكمية")
-      router.refresh()
+      if (onProductsChange) {
+        onProductsChange()
+      } else {
+        router.refresh()
+      }
     }
     setLoadingId(null)
   }
@@ -77,7 +82,11 @@ export function ProductsTable({ products }: ProductsTableProps) {
       toast.error(`حدث خطأ في حذف المنتج: ${error.message || 'خطأ غير معروف'}`)
     } else {
       toast.success("تم حذف المنتج بنجاح")
-      router.refresh()
+      if (onProductsChange) {
+        onProductsChange()
+      } else {
+        router.refresh()
+      }
     }
     setDeleteProduct(null)
     setLoadingId(null)
@@ -231,7 +240,12 @@ export function ProductsTable({ products }: ProductsTableProps) {
 
       {/* حوار التعديل */}
       {editProduct && (
-        <EditProductDialog product={editProduct} open={!!editProduct} onOpenChange={() => setEditProduct(null)} />
+        <EditProductDialog 
+          product={editProduct} 
+          open={!!editProduct} 
+          onOpenChange={() => setEditProduct(null)} 
+          onProductUpdated={onProductsChange}
+        />
       )}
     </div>
   )

@@ -17,9 +17,10 @@ interface EditProductDialogProps {
   product: Product
   open: boolean
   onOpenChange: (open: boolean) => void
+  onProductUpdated?: () => void
 }
 
-export function EditProductDialog({ product, open, onOpenChange }: EditProductDialogProps) {
+export function EditProductDialog({ product, open, onOpenChange, onProductUpdated }: EditProductDialogProps) {
   const [loading, setLoading] = useState(false)
   const [imagePreview, setImagePreview] = useState<string | null>(product.image_url)
   const router = useRouter()
@@ -47,16 +48,96 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
     setImagePreview(product.image_url)
   }, [product])
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
+  // Compress image to reduce size (max 150KB after compression)
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
       const reader = new FileReader()
-      reader.onloadend = () => {
-        const base64 = reader.result as string
-        setImagePreview(base64)
-        setForm((prev) => ({ ...prev, image_url: base64 }))
+      reader.onload = (e) => {
+        const img = new Image()
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          let { width, height } = img
+          
+          // Max dimensions - reduce more aggressively for large images
+          const maxDimension = 600
+          if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+              height = Math.round((height / width) * maxDimension)
+              width = maxDimension
+            } else {
+              width = Math.round((width / height) * maxDimension)
+              height = maxDimension
+            }
+          }
+          
+          canvas.width = width
+          canvas.height = height
+          
+          const ctx = canvas.getContext('2d')
+          if (ctx) {
+            // Use white background for transparency
+            ctx.fillStyle = '#FFFFFF'
+            ctx.fillRect(0, 0, width, height)
+            ctx.drawImage(img, 0, 0, width, height)
+          }
+          
+          // Start with quality 0.6 and reduce until under 150KB
+          let quality = 0.6
+          let result = canvas.toDataURL('image/jpeg', quality)
+          
+          // Reduce quality until under 150KB (base64 is ~1.37x larger than binary)
+          const maxBase64Size = 150 * 1024 * 1.37
+          while (result.length > maxBase64Size && quality > 0.1) {
+            quality -= 0.1
+            result = canvas.toDataURL('image/jpeg', quality)
+          }
+          
+          // If still too large, reduce dimensions further
+          if (result.length > maxBase64Size) {
+            const scale = 0.5
+            canvas.width = Math.round(width * scale)
+            canvas.height = Math.round(height * scale)
+            if (ctx) {
+              ctx.fillStyle = '#FFFFFF'
+              ctx.fillRect(0, 0, canvas.width, canvas.height)
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+            }
+            result = canvas.toDataURL('image/jpeg', 0.5)
+          }
+          
+          resolve(result)
+        }
+        img.onerror = () => {
+          // If image fails to load, return empty string
+          resolve('')
+        }
+        img.src = e.target?.result as string
+      }
+      reader.onerror = () => {
+        resolve('')
       }
       reader.readAsDataURL(file)
+    })
+  }
+
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Show loading state
+      setImagePreview('loading')
+      
+      // Compress image
+      const compressedBase64 = await compressImage(file)
+      
+      if (compressedBase64) {
+        setImagePreview(compressedBase64)
+        setForm((prev) => ({ ...prev, image_url: compressedBase64 }))
+      } else {
+        // If compression failed, just skip the image
+        setImagePreview(null)
+        setForm((prev) => ({ ...prev, image_url: '' }))
+        toast.error('حدث خطأ في معالجة الصورة')
+      }
     }
   }
 
@@ -89,7 +170,11 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
     } else {
       toast.success("تم تحديث المنتج بنجاح")
       onOpenChange(false)
-      router.refresh()
+      if (onProductUpdated) {
+        onProductUpdated()
+      } else {
+        router.refresh()
+      }
     }
     setLoading(false)
   }

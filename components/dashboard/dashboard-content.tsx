@@ -44,8 +44,8 @@ export function DashboardContent({ products, orders }: DashboardContentProps) {
     .reduce((sum, o) => sum + Number(o.remaining_amount || 0), 0)
   const debtOrders = orders.filter((o) => (o.payment_status === "دين" || o.payment_status === "دفع جزئي") && o.status !== "مرتجع" && o.status !== "ملغي").length
 
-  // حساب قيمة المخزون الإجمالية
-  const inventoryValue = products.reduce((sum, p) => sum + (p.quantity * p.selling_price), 0)
+  // حساب قيمة المخزون الإجمالية (بسعر الشراء)
+  const inventoryValue = products.reduce((sum, p) => sum + (p.quantity * p.purchase_price), 0)
 
   // آخر الطلبات
   const recentOrders = orders.slice(0, 5)

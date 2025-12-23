@@ -1,3 +1,0 @@
-module.exports=[18900,a=>{a.n(a.i(12035))},46731,a=>{a.n(a.i(85518))},30586,a=>{a.n(a.i(99192))},4996,a=>{a.n(a.i(25989))},74218,a=>{a.n(a.i(2049))},25989,(a,b,c)=>{"use strict";Object.defineProperty(c,"__esModule",{value:!0}),Object.defineProperty(c,"default",{enumerable:!0,get:function(){return f}});let d=a.r(40510),e=a.r(68440);function f(){return(0,d.jsx)(e.HTTPAccessErrorFallback,{status:401,message:"You're not authorized to access this page."})}("function"==typeof c.default||"object"==typeof c.default&&null!==c.default)&&void 0===c.default.__esModule&&(Object.defineProperty(c.default,"__esModule",{value:!0}),Object.assign(c.default,c),b.exports=c.default)}];
-
-//# sourceMappingURL=Downloads_arabic-store-management%20%281%29_c2caf7d8._.js.map
